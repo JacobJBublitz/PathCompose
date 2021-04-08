@@ -1,7 +1,3 @@
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.tween
 import androidx.compose.desktop.Window
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
@@ -21,13 +17,10 @@ import androidx.compose.ui.unit.dp
 import pathcompose.BfmtStarPlanner
 import pathcompose.DiscreteLocalPlanner
 import pathcompose.ProblemDefinition
-import pathcompose.RrtPlanner
 import pathcompose.geometry.Point2
 import pathcompose.geometry.Rotation2
 import pathcompose.space.*
 import pathcompose.util.Tree
-
-const val LINE_LEN = 5.0f
 
 const val CANVAS_WIDTH = 1000.0
 const val CANVAS_HEIGHT = 500.0
@@ -36,6 +29,25 @@ const val FIELD_WIDTH = 27.0 * 12.0
 const val FIELD_LENGTH = 54.0 * 12.0
 
 val ROBOT = Robot(32.0, 28.0)
+
+val WORKSPACE = Workspace(
+    ROBOT,
+    FIELD_WIDTH,
+    FIELD_LENGTH,
+    listOf(
+        CircleFieldObstacle(Point2(FIELD_LENGTH / 2.0, -FIELD_WIDTH / 4.0), 48.0),
+        CircleFieldObstacle(Point2(FIELD_LENGTH / 2.0, FIELD_WIDTH / 4.0), 48.0),
+        CircleFieldObstacle(Point2((5.0 / 16.0) * FIELD_LENGTH, 0.0), 48.0),
+        CircleFieldObstacle(Point2((11.0 / 16.0) * FIELD_LENGTH, 0.0), 48.0),
+    )
+)
+
+val PROBLEM = ProblemDefinition(
+    WORKSPACE,
+    Se2Sample(ROBOT.length, 0.0, Rotation2.ZERO),
+    Se2Sample(FIELD_LENGTH - ROBOT.length, 0.0, Rotation2.ZERO),
+    12.0
+)
 
 fun Se2Sample.toOffset(): Offset = Offset(x.toFloat(), y.toFloat())
 fun Point2.toOffset(): Offset = Offset(x.toFloat(), y.toFloat())
@@ -87,22 +99,10 @@ fun DrawScope.drawPath(color: Color, path: List<Se2Sample>) {
 }
 
 fun main() = Window(size = IntSize(1280, 720)) {
-    val space by remember {
-        mutableStateOf(
-            Workspace(
-                ROBOT,
-                FIELD_WIDTH,
-                FIELD_LENGTH,
-                listOf(
-                    CircleFieldObstacle(Point2(FIELD_LENGTH / 2.0, -FIELD_WIDTH / 4.0), 48.0),
-                    CircleFieldObstacle(Point2(FIELD_LENGTH / 2.0, FIELD_WIDTH / 4.0), 48.0),
-                    CircleFieldObstacle(Point2(FIELD_LENGTH / 4.0, 0.0), 36.0),
-                    CircleFieldObstacle(Point2(3.0 * FIELD_LENGTH / 4.0, 0.0), 36.0),
-
-                    )
-            )
-        )
+    val planner by remember {
+        mutableStateOf(BfmtStarPlanner(WORKSPACE, DiscreteLocalPlanner(WORKSPACE), 24.0, 2500))
     }
+    val path by remember { mutableStateOf(planner.solve(PROBLEM)) }
 
     MaterialTheme {
         Canvas(Modifier.size(CANVAS_WIDTH.dp, CANVAS_HEIGHT.dp)) {
@@ -115,34 +115,17 @@ fun main() = Window(size = IntSize(1280, 720)) {
                 translate(0.0f, FIELD_WIDTH.toFloat() / 2.0f)
             }) {
 
-                for (obstacle in space.obstacles)
+                for (obstacle in WORKSPACE.obstacles)
                     drawObstacle(obstacle)
 
-                val problem = ProblemDefinition(
-                    space,
-                    Se2Sample(ROBOT.length, 0.0, Rotation2.ZERO),
-                    Se2Sample(FIELD_LENGTH - ROBOT.length, 0.0, Rotation2.ZERO),
-                    12.0
-                )
+                drawCircle(Color.Green, 3.0f, PROBLEM.start.toOffset())
+                drawCircle(Color.Blue, 3.0f, PROBLEM.goal.toOffset())
 
-                drawCircle(Color.Green, 3.0f, problem.start.toOffset())
-                drawCircle(Color.Blue, 3.0f, problem.goal.toOffset())
+                drawTree(Color.LightGray, planner.activeTree!!.tree)
+                drawTree(Color.LightGray, planner.inactiveTree!!.tree)
+                drawPath(Color.Magenta, path)
 
-//                val p = BfmtStarPlanner(space, DiscreteLocalPlanner(space), 50.0, 1000)
-//                for (s in p.samples)
-//                    drawCircle(Color.LightGray, 1.0f, s.toOffset())
-//                val path2 = p.solve(problem)
-//                drawTree(Color.Red, p.activeTree!!.tree)
-//                drawTree(Color.Blue, p.inactiveTree!!.tree)
-//                drawPath(Color.Magenta, path2)
-
-                val planner = RrtPlanner(DiscreteLocalPlanner(space))
-                val path = planner.solve(problem)
-                drawTree(Color.LightGray, planner.tree)
-                drawPath(Color.Yellow, path)
-
-
-                drawRobot(ROBOT, space.sample())
+                drawRobot(ROBOT, WORKSPACE.sample())
             }
         }
     }

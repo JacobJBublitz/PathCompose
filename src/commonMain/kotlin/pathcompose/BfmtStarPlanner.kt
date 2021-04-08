@@ -7,7 +7,7 @@ class BfmtStarPlanner<State>(
     private val space: Space<State>,
     private val localPlanner: LocalPlanner<State>,
     private val radius: Double,
-    private val numSamples: Int = 1000
+    private val numSamples: Int = 100
 ) : Planner<State>() {
     var activeTree: TreeData<State>? = null
     var inactiveTree: TreeData<State>? = null
@@ -40,6 +40,7 @@ class BfmtStarPlanner<State>(
 
             if (c != null) { // TODO: This is first path criterion, also allow best path criterion
                 val path = path(c, activeTree!!)
+                path.reverse()
                 path.addAll(path(c, inactiveTree!!))
                 return path
             } else {
@@ -78,17 +79,29 @@ class BfmtStarPlanner<State>(
     }
 
     private fun path(c: State, t: TreeData<State>): MutableList<State> {
-        return mutableListOf()
+        val path = mutableListOf<State>()
+        var state: State? = c
+        while (state != null) {
+            path.add(state)
+            state = t.tree.getParent(state)
+        }
+        return path
     }
 
-    private fun complement(t: TreeData<State>): TreeData<State> = TODO()
+    private fun complement(t: TreeData<State>): TreeData<State> =
+        if (t === activeTree)
+            inactiveTree!!
+        else
+            activeTree!!
 
     private fun expand(t: TreeData<State>, z: State, c: State?): State? {
         var bestConnection: State? = c
         val newFrontier = hashSetOf<State>()
-        val zNear = near(t.tree.nodes.subtract(listOf(z)), z, radius).intersect(t.unexploredNodes)
+        val zNear = near(t.unexploredNodes, z, radius)
+//        val zNear = near(t.tree.nodes.subtract(listOf(z)), z, radius).intersect(t.unexploredNodes)
         for (x in zNear) {
-            val xNear = near(t.tree.nodes.subtract(listOf(z)), x, radius).intersect(t.frontierNodes)
+//            val xNear = near(t.tree.nodes.subtract(listOf(z)), x, radius).intersect(t.frontierNodes)
+            val xNear = near(t.frontierNodes, x, radius)
             val xMin = xNear.minByOrNull { cost(it, t) + cost(it, x) }
                 ?: throw IllegalStateException() // TODO: Better errors
             if (localPlanner.check(xMin, x)) {
